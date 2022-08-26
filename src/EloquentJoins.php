@@ -5,6 +5,7 @@ namespace Kirschbaum\PowerJoins;
 use Illuminate\Database\Eloquent\Builder as EloquentQueryBuilder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Kirschbaum\PowerJoins\Mixins\ComputedColumn;
 use Kirschbaum\PowerJoins\Mixins\JoinRelationship;
 use Kirschbaum\PowerJoins\Mixins\QueryBuilderExtraMethods;
 use Kirschbaum\PowerJoins\Mixins\QueryRelationshipExistence;
@@ -19,6 +20,7 @@ class EloquentJoins
     {
         EloquentQueryBuilder::mixin(new JoinRelationship);
         EloquentQueryBuilder::mixin(new QueryRelationshipExistence);
+        EloquentQueryBuilder::mixin(new ComputedColumn);
         QueryBuilder::mixin(new QueryBuilderExtraMethods);
 
         Relation::mixin(new RelationshipsExtraMethods);
