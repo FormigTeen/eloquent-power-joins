@@ -54,7 +54,7 @@ class MySql extends Expression
         return $this->raw("$column" . ($alias ? " AS $alias" : ""));
     }
 
-    function count(): Expression
+    function count(): self
     {
         $column = $this->getValue();
         return $this->raw("COUNT($column)");
