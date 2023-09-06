@@ -8,7 +8,6 @@ use Kirschbaum\PowerJoins\Tests\Models\Post;
 use Kirschbaum\PowerJoins\Tests\Models\User;
 use Kirschbaum\PowerJoins\Tests\Models\Image;
 use Kirschbaum\PowerJoins\Tests\Models\Comment;
-use Kirschbaum\PowerJoins\Tests\Models\Category;
 use Kirschbaum\PowerJoins\Tests\Models\UserProfile;
 
 class JoinRelationshipTest extends TestCase
@@ -104,7 +103,7 @@ class JoinRelationshipTest extends TestCase
 
         $this->assertCount(5, $posts);
         $this->assertStringContainsString(
-            'inner join "images" on "images"."imageable_id" = "posts"."id" and "imageable_type" = ?',
+            'inner join "images" on "images"."imageable_id" = "posts"."id" and "images"."imageable_type" = ?',
             $query
         );
     }
@@ -120,7 +119,7 @@ class JoinRelationshipTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            'inner join "images" on "images"."imageable_id" = "posts"."id" and "imageable_type" = ?',
+            'inner join "images" on "images"."imageable_id" = "posts"."id" and "images"."imageable_type" = ?',
             $query
         );
     }
@@ -304,7 +303,7 @@ class JoinRelationshipTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            'inner join "images" on "images"."imageable_id" = "posts"."id" and "imageable_type" = ?',
+            'inner join "images" on "images"."imageable_id" = "posts"."id" and "images"."imageable_type" = ?',
             $query
         );
     }
@@ -354,7 +353,7 @@ class JoinRelationshipTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            'left join "images" on "images"."imageable_id" = "posts"."id" and "imageable_type" = ?',
+            'left join "images" on "images"."imageable_id" = "posts"."id" and "images"."imageable_type" = ?',
             $query
         );
 
@@ -456,9 +455,12 @@ class JoinRelationshipTest extends TestCase
     {
         $profile = factory(UserProfile::class)->create();
 
-        $user = User::query()->select('profile.city')->leftJoinRelationship('profile', function ($join) {
-            $join->as('profile');
-        })->first();
+        $user = User::query()
+            ->select('profile.city')
+            ->leftJoinRelationship('profile', function ($join) {
+                $join->as('profile');
+            })
+            ->first();
 
         $this->assertEquals($profile->city, $user->city);
     }
@@ -685,5 +687,96 @@ class JoinRelationshipTest extends TestCase
             'inner join "comments" on "comments"."post_id" = "posts"."id"',
             $sql
         );
+    }
+
+    public function test_scope_inside_nested_where()
+    {
+        Comment::query()->joinRelationship('post', function ($join) {
+            $join->where(fn ($query) => $query->published());
+        })->get();
+
+        $sql = Comment::query()->joinRelationship('post', function ($join) {
+            $join->where(fn ($query) => $query->published());
+        })->toSql();
+
+        $this->assertStringContainsString(
+            'inner join "posts" on "comments"."post_id" = "posts"."id" and ("posts"."published" = ?)',
+            $sql
+        );
+    }
+
+    public function test_it_can_alias_belongs_to_many()
+    {
+        Group::query()->joinRelationship('posts', [
+            'posts' => fn ($join) => $join->as('posts_1')->where('id', 2),
+            'post_groups' => fn ($join) => $join->as('pivot_posts_1'),
+        ])->get();
+
+        $sql = Group::query()->joinRelationship('posts', [
+            'posts' => fn ($join) => $join->as('posts_1')->where('id', 2),
+            'post_groups' => fn ($join) => $join->as('pivot_posts_1'),
+        ])->toSql();
+
+        $this->assertStringContainsString(
+            'inner join "post_groups" as "pivot_posts_1" on "pivot_posts_1"."group_id" = "groups"."id"',
+            $sql
+        );
+
+        $this->assertStringContainsString(
+            'inner join "posts" as "posts_1" on "posts_1"."id" = "pivot_posts_1"."post_id" and "posts_1"."id" = ?',
+            $sql
+        );
+    }
+
+    public function test_has_one_of_many()
+    {
+        $post = factory(Post::class)->create();
+        $bestComment = factory(Comment::class)->state('approved')->create(['body' => 'best comment', 'votes' => 2]);
+        $lastComment = factory(Comment::class)->state('approved')->create(['body' => 'worst comment', 'votes' => 0]);
+
+        $bestCommentSql = Post::query()
+            ->select('posts.*', 'comments.body')
+            ->joinRelationship('bestComment')
+            ->toSql();
+
+        $bestCommentPost = Post::query()
+            ->select('posts.*', 'comments.body')
+            ->joinRelationship('bestComment')
+            ->first();
+
+        $this->assertStringContainsString(
+            'max("comments"."votes") as "votes_aggregate"',
+            $bestCommentSql
+        );
+
+        $this->assertEquals($bestComment->body, $bestCommentPost->body);
+
+        $lastCommentSql = Post::query()
+            ->select('posts.*', 'comments.body')
+            ->joinRelationship('lastComment')
+            ->toSql();
+
+        $lastCommentPost = Post::query()
+            ->select('posts.*', 'comments.body')
+            ->joinRelationship('lastComment')
+            ->first();
+
+        $this->assertStringContainsString(
+            'max("comments"."id") as "id_aggregate"',
+            strtolower($lastCommentSql)
+        );
+
+        $this->assertEquals($lastComment->body, $lastCommentPost->body);
+    }
+
+    public function test_join_with_clone_does_not_duplicate()
+    {
+        $query = Post::query();
+
+        $query->leftJoinRelationship('user');
+        $clonedSql = $query->clone()->leftJoinRelationship('user')->toSql();
+        $sql = $query->toSql();
+
+        $this->assertEquals($clonedSql, $sql);
     }
 }

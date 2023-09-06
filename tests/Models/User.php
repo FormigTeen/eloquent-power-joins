@@ -45,6 +45,15 @@ class User extends Model
         });
     }
 
+    public function publishedOrReviewedPosts(): HasMany
+    {
+        return $this->hasMany(Post::class)->where(function ($query) {
+            $query
+                ->where('published', true)
+                ->orWhere('reviewed', true);
+        });
+    }
+
     public function comments(): HasMany
     {
         return $this->hasMany(Comment::class);
